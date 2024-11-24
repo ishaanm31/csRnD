@@ -12,6 +12,7 @@ stava.iml
 .DS_Store
 /benchmarks/dacapo/dacapo-9.12-MR1-bach.jar
 /scripts/
+/soot/
 
 .vscode/
 /benchmarks/dacapo/out/

@@ -8,5 +8,11 @@ public class Main {
 	}
 
 	public static void func(Node p1, Node p2, Node p3) {
+		f1();
+	}
+	public static void f1() {
+		Node n = new Node();
+		func(n, n, n);
+		return;
 	}
 }

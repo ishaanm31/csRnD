@@ -223,8 +223,99 @@ public class OwnershipResolver {
         }
         return tmpobj;
     }
+
+    // Helper function
+    // Returns set of sets of strongly connected Soot methods
+    private Set<Set<SootMethod>> StronglyConnectedMethods() {
+        // Step 1: Generate the CallGraph
+        CallGraph cg = Scene.v().getCallGraph();
+
+        // Step 2: Create a directed graph representation
+        Map<SootMethod, List<SootMethod>> graph = new HashMap<>();
+        Iterator<Edge> edges = cg.iterator();
+        while (edges.hasNext()) {
+            Edge edge = edges.next();
+            SootMethod src = edge.src();
+            SootMethod tgt = edge.tgt();
+            if (isJavaLibraryMethod(src) | isJavaLibraryMethod(tgt))
+                continue;
+            graph.computeIfAbsent(src, k -> new ArrayList<>()).add(tgt);
+        }
+
+        // Step 3: Find SCCs using Tarjan's algorithm
+        return findSCCs(graph);
+    }
+
+    // Helper function to check if a method is a Java library method
+    private boolean isJavaLibraryMethod(SootMethod method) {
+        String className = method.getDeclaringClass().getName();
+        // Check for common Java library prefixes
+        return className.startsWith("java.") ||
+               className.startsWith("javax.") ||
+               className.startsWith("jdk.") ||
+               className.startsWith("sun.") ||
+               className.startsWith("com.sun.") ||
+               className.startsWith("jdk.internal.");
+    }
+
+    // Helper method to find SCCs using Tarjan's Algorithm
+    private Set<Set<SootMethod>> findSCCs(Map<SootMethod, List<SootMethod>> graph) {
+        Set<Set<SootMethod>> result = new HashSet<>();
+        Map<SootMethod, Integer> indices = new HashMap<>();
+        Map<SootMethod, Integer> lowLinks = new HashMap<>();
+        Stack<SootMethod> stack = new Stack<>();
+        Set<SootMethod> onStack = new HashSet<>();
+        int index = 0;
+
+        // Run DFS for each node in the graph
+        for (SootMethod node : graph.keySet()) {
+            if (!indices.containsKey(node)) {
+                tarjanDFS(node, graph, stack, indices, lowLinks, onStack, result, index);
+            }
+        }
+
+        return result;
+    }
+
+    // Helper method for Tarjan's DFS
+    private void tarjanDFS(SootMethod node, Map<SootMethod, List<SootMethod>> graph,
+                        Stack<SootMethod> stack, Map<SootMethod, Integer> indices,
+                        Map<SootMethod, Integer> lowLinks, Set<SootMethod> onStack,
+                        Set<Set<SootMethod>> result, int index) {
+        indices.put(node, index);
+        lowLinks.put(node, index);
+        index++;
+        stack.push(node);
+        onStack.add(node);
+
+        // Explore neighbors
+        for (SootMethod neighbor : graph.getOrDefault(node, new ArrayList<>())) {
+            if (!indices.containsKey(neighbor)) {
+                tarjanDFS(neighbor, graph, stack, indices, lowLinks, onStack, result, index);
+                lowLinks.put(node, Math.min(lowLinks.get(node), lowLinks.get(neighbor)));
+            } else if (onStack.contains(neighbor)) {
+                lowLinks.put(node, Math.min(lowLinks.get(node), indices.get(neighbor)));
+            }
+        }
+
+        // Check if the current node is the root of an SCC
+        if (lowLinks.get(node).equals(indices.get(node))) {
+            Set<SootMethod> scc = new HashSet<>();
+            SootMethod w;
+            do {
+                w = stack.pop();
+                onStack.remove(w);
+                scc.add(w);
+            } while (!w.equals(node));
+            result.add(scc);
+        }
+    }
+
     // function to resolve
     void AddCallerSummaries(){
+        System.out.println("Start printing SCCs");
+        System.out.println(StronglyConnectedMethods());
+        System.out.println("Ended printing SCCs");
         CallGraph cg = Scene.v().getCallGraph();
         Set<SootMethod> keySet = existingSummaries.keySet();
         SootMethod globalMethod=null;
